@@ -6,5 +6,6 @@ final: prev: {
     CoreAudio = null;
     CoreServices = null;
     ForceFeedback = null;
+    OpenGL = null;
   };
 }
