@@ -106,11 +106,9 @@ stdenv.mkDerivation (finalAttrs: {
       vulkan-headers
       vulkan-loader
     ]
-      lib.optionals
-      stdenv.hostPlatform.isLinux
-      [
-        libusb1
-      ]
+    ++ lib.optionals stdenv.hostPlatform.isLinux [
+      libusb1
+    ]
     ++ lib.optional (
       stdenv.hostPlatform.isUnix && !stdenv.hostPlatform.isDarwin
     ) libayatana-appindicator
