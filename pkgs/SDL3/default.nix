@@ -2,266 +2,237 @@
   lib,
   stdenv,
   config,
-  fetchFromGitHub,
-  nix-update-script,
-  pkg-config,
-  cmake,
-  mesa,
-  libGLSupported ? lib.elem stdenv.hostPlatform.system mesa.meta.platforms,
-  openglSupport ? libGLSupported,
-  libGL,
-  alsaSupport ? stdenv.hostPlatform.isLinux && !stdenv.hostPlatform.isAndroid,
   alsa-lib,
-  x11Support ? !stdenv.hostPlatform.isWindows && !stdenv.hostPlatform.isAndroid,
-  libX11,
-  xorgproto,
-  libICE,
-  libXi,
-  libXScrnSaver,
-  libXcursor,
-  libXinerama,
-  libXext,
-  libXxf86vm,
-  libXrandr,
-  waylandSupport ? stdenv.hostPlatform.isLinux && !stdenv.hostPlatform.isAndroid,
-  wayland,
-  wayland-protocols,
-  wayland-scanner,
-  drmSupport ? false,
-  libdrm,
-  libgbm,
-  libxkbcommon,
-  dbusSupport ? stdenv.hostPlatform.isLinux && !stdenv.hostPlatform.isAndroid,
+  apple-sdk_11,
+  cmake,
+  darwinMinVersionHook,
   dbus,
-  udevSupport ? stdenv.hostPlatform.isLinux && !stdenv.hostPlatform.isAndroid,
-  udev,
-  ibusSupport ? false,
+  fcitx5,
+  fetchFromGitHub,
   ibus,
-  libdecorSupport ? stdenv.hostPlatform.isLinux && !stdenv.hostPlatform.isAndroid,
+  installShellFiles,
+  libGL,
+  libayatana-appindicator,
   libdecor,
+  libdrm,
+  libjack2,
+  libpulseaudio,
+  libusb1,
+  libxkbcommon,
+  libgbm,
+  ninja,
+  nix-update-script,
+  nixosTests,
+  pipewire,
+  sndio,
+  systemdLibs,
+  testers,
+  validatePkgConfig,
+  vulkan-loader,
+  vulkan-headers,
+  wayland,
+  wayland-scanner,
+  xorg,
+  zenity,
+  alsaSupport ? stdenv.hostPlatform.isLinux && !stdenv.hostPlatform.isAndroid,
+  dbusSupport ? stdenv.hostPlatform.isLinux && !stdenv.hostPlatform.isAndroid,
+  drmSupport ? stdenv.hostPlatform.isLinux && !stdenv.hostPlatform.isAndroid,
+  ibusSupport ? stdenv.hostPlatform.isUnix && !stdenv.hostPlatform.isDarwin,
+  jackSupport ? stdenv.hostPlatform.isLinux && !stdenv.hostPlatform.isAndroid,
+  libdecorSupport ? stdenv.hostPlatform.isLinux && !stdenv.hostPlatform.isAndroid,
+  openglSupport ? lib.meta.availableOn stdenv.hostPlatform libGL,
   pipewireSupport ? stdenv.hostPlatform.isLinux && !stdenv.hostPlatform.isAndroid,
-  pipewire, # NOTE: must be built with SDL2 without pipewire support
   pulseaudioSupport ?
     config.pulseaudio or stdenv.hostPlatform.isLinux && !stdenv.hostPlatform.isAndroid,
-  libpulseaudio,
-  AudioUnit,
-  Cocoa,
-  CoreAudio,
-  CoreServices,
-  ForceFeedback,
-  OpenGL,
-  audiofile,
-  libiconv,
-  withStatic ? stdenv.hostPlatform.isMinGW,
-  # passthru.tests
-  testers,
-  guile-sdl2,
-  jazz2,
-  SDL2_ttf,
-  SDL2_net,
-  SDL2_gfx,
-  SDL2_sound,
-  SDL2_mixer,
-  SDL2_image,
-  python3Packages,
+  libudevSupport ? stdenv.hostPlatform.isLinux && !stdenv.hostPlatform.isAndroid,
+  sndioSupport ? false,
+  testSupport ? true,
+  waylandSupport ? stdenv.isLinux && !stdenv.hostPlatform.isAndroid,
+  x11Support ? !stdenv.hostPlatform.isAndroid && !stdenv.hostPlatform.isWindows,
 }:
 
-# NOTE: When editing this expression see if the same change applies to
-# SDL expression too
-
 stdenv.mkDerivation (finalAttrs: {
-  pname = "SDL3";
-  version = "3.1.3";
+  pname = "sdl3";
+  version = "3.2.0";
+
+  outputs = [
+    "lib"
+    "dev"
+    "out"
+  ];
 
   src = fetchFromGitHub {
     owner = "libsdl-org";
     repo = "SDL";
-    rev = "preview-${finalAttrs.version}";
-    hash = "sha256-S7yRcLHMPgq6+gec8l+ESxp2dJ+6Po/UNsBUXptQzMQ=";
+    tag = "release-${finalAttrs.version}";
+    hash = "sha256-gVLZPuXtMdFhylxh3+LC/SJCaQiOwZpbVcBGctyGGYY=";
   };
-  dontDisableStatic = if withStatic then 1 else 0;
-  outputs = [
-    "out"
-    "dev"
-  ];
-  outputBin = "dev"; # sdl-config
 
-  # patches = [
-  #   # `sdl2-config --cflags` from Nixpkgs returns include path to just SDL2.
-  #   # On a normal distro this is enough for includes from all SDL2* packages to work,
-  #   # but on NixOS they're spread across different paths.
-  #   # This patch + the setup-hook will ensure that `sdl2-config --cflags` works correctly.
-  #   ./find-headers.patch
-  # ];
-  #
-  # postPatch = ''
-  #   # Fix running wayland-scanner for the build platform when cross-compiling.
-  #   # See comment here: https://github.com/libsdl-org/SDL/issues/4860#issuecomment-1119003545
-  #   substituteInPlace configure \
-  #     --replace '$(WAYLAND_SCANNER)' 'wayland-scanner'
-  # '';
+  postPatch =
+    # Tests timeout on Darwin
+    lib.optionalString testSupport ''
+      substituteInPlace test/CMakeLists.txt \
+        --replace-fail 'set(noninteractive_timeout 10)' 'set(noninteractive_timeout 30)'
+    ''
+    + lib.optionalString waylandSupport ''
+      substituteInPlace src/video/wayland/SDL_waylandmessagebox.c \
+        --replace-fail '"zenity"' '"${lib.getExe zenity}"'
+    '';
 
   strictDeps = true;
 
-  depsBuildBuild = [ pkg-config ];
+  nativeBuildInputs = [
+    cmake
+    ninja
+    validatePkgConfig
+  ] ++ lib.optional waylandSupport wayland-scanner;
 
-  nativeBuildInputs =
-    [
-      pkg-config
-      cmake
+  buildInputs =
+    finalAttrs.dlopenBuildInputs
+    ++ lib.optionals stdenv.hostPlatform.isDarwin [
+      # error: 'MTLPixelFormatASTC_4x4_LDR' is unavailable: not available on macOS
+      (darwinMinVersionHook "11.0")
+
+      apple-sdk_11
     ]
-    ++ lib.optionals waylandSupport [
-      wayland
-      wayland-scanner
-    ];
-
-  dlopenPropagatedBuildInputs =
-    [ ]
-    # Propagated for #include <GLES/gl.h> in SDL_opengles.h.
-    ++ lib.optional (openglSupport && !stdenv.hostPlatform.isDarwin) libGL
-    # Propagated for #include <X11/Xlib.h> and <X11/Xatom.h> in SDL_syswm.h.
-    ++ lib.optionals x11Support [ libX11 ];
-
-  propagatedBuildInputs =
-    lib.optionals x11Support [ xorgproto ] ++ finalAttrs.dlopenPropagatedBuildInputs;
+    ++ lib.optionals ibusSupport [
+      fcitx5
+      ibus
+    ]
+    ++ lib.optional waylandSupport zenity;
 
   dlopenBuildInputs =
-    lib.optionals alsaSupport [
-      alsa-lib
-      audiofile
+    [
+      vulkan-headers
+      vulkan-loader
     ]
+      lib.optionals
+      stdenv.hostPlatform.isLinux
+      [
+        libusb1
+      ]
+    ++ lib.optional (
+      stdenv.hostPlatform.isUnix && !stdenv.hostPlatform.isDarwin
+    ) libayatana-appindicator
+    ++ lib.optional alsaSupport alsa-lib
     ++ lib.optional dbusSupport dbus
-    ++ lib.optional libdecorSupport libdecor
-    ++ lib.optional pipewireSupport pipewire
-    ++ lib.optional pulseaudioSupport libpulseaudio
-    ++ lib.optional udevSupport udev
-    ++ lib.optionals waylandSupport [
-      wayland
-      libxkbcommon
-    ]
-    ++ lib.optionals x11Support [
-      libICE
-      libXi
-      libXScrnSaver
-      libXcursor
-      libXinerama
-      libXext
-      libXrandr
-      libXxf86vm
-    ]
     ++ lib.optionals drmSupport [
       libdrm
       libgbm
+    ]
+    ++ lib.optional jackSupport libjack2
+    ++ lib.optional libdecorSupport libdecor
+    ++ lib.optional libudevSupport systemdLibs
+    ++ lib.optional openglSupport libGL
+    ++ lib.optional pipewireSupport pipewire
+    ++ lib.optional pulseaudioSupport libpulseaudio
+    ++ lib.optional sndioSupport sndio
+    ++ lib.optionals waylandSupport [
+      libxkbcommon
+      wayland
+    ]
+    ++ lib.optionals x11Support [
+      xorg.libX11
+      xorg.libXScrnSaver
+      xorg.libXcursor
+      xorg.libXext
+      xorg.libXfixes
+      xorg.libXi
+      xorg.libXrandr
     ];
 
-  buildInputs =
-    [ libiconv ]
-    ++ finalAttrs.dlopenBuildInputs
-    ++ lib.optional ibusSupport ibus
-    ++ lib.optionals waylandSupport [ wayland-protocols ]
-    ++ lib.optionals stdenv.hostPlatform.isDarwin [
-      AudioUnit
-      Cocoa
-      CoreAudio
-      CoreServices
-      ForceFeedback
-      OpenGL
-    ];
+  propagatedBuildInputs = finalAttrs.dlopenPropagatedBuildInputs;
 
-  enableParallelBuilding = true;
-
-  # configureFlags =
-  #   [ "--disable-oss" ]
-  #   ++ lib.optional (!x11Support) "--without-x"
-  #   ++ lib.optional alsaSupport "--with-alsa-prefix=${alsa-lib.out}/lib"
-  #   ++ lib.optional stdenv.hostPlatform.isWindows "--disable-video-opengles"
-  #   ++ lib.optional stdenv.hostPlatform.isDarwin "--disable-sdltest";
+  dlopenPropagatedBuildInputs =
+    lib.optional (openglSupport && !stdenv.hostPlatform.isDarwin) libGL
+    ++ lib.optional x11Support xorg.libX11;
 
   cmakeFlags = [
-    "-DOSS=OFF"
+    (lib.cmakeBool "SDL_ALSA" alsaSupport)
+    (lib.cmakeBool "SDL_DBUS" dbusSupport)
+    (lib.cmakeBool "SDL_IBUS" ibusSupport)
+    (lib.cmakeBool "SDL_JACK" jackSupport)
+    (lib.cmakeBool "SDL_KMSDRM" drmSupport)
+    (lib.cmakeBool "SDL_LIBUDEV" libudevSupport)
+    (lib.cmakeBool "SDL_OPENGL" openglSupport)
+    (lib.cmakeBool "SDL_PIPEWIRE" pipewireSupport)
+    (lib.cmakeBool "SDL_PULSEAUDIO" pulseaudioSupport)
+    (lib.cmakeBool "SDL_SNDIO" sndioSupport)
+    (lib.cmakeBool "SDL_TEST_LIBRARY" testSupport)
+    (lib.cmakeBool "SDL_WAYLAND" waylandSupport)
+    (lib.cmakeBool "SDL_WAYLAND_LIBDECOR" libdecorSupport)
+    (lib.cmakeBool "SDL_X11" x11Support)
 
-    "-DVIDEO_X11=${if x11Support then "ON" else "OFF"}"
-    "-DALSA=${if alsaSupport then "ON" else "OFF"}"
-    "-DVIDEO_OPENGLES=${if stdenv.hostPlatform.isWindows then "OFF" else "ON"}"
-    "-DSDL_TEST=${if stdenv.hostPlatform.isDarwin then "OFF" else "ON"}"
+    (lib.cmakeBool "SDL_TESTS" finalAttrs.finalPackage.doCheck)
   ];
 
-  # We remove libtool .la files when static libs are requested,
-  # because they make the builds of downstream libs like `SDL_tff`
-  # fail with `cannot find -lXext, `-lXcursor` etc. linker errors
-  # because the `.la` files are not pruned if static libs exist
-  # (see https://github.com/NixOS/nixpkgs/commit/fd97db43bcb05e37f6bb77f363f1e1e239d9de53)
-  # and they also don't carry the necessary `-L` paths of their
-  # X11 dependencies.
-  # For static linking, it is better to rely on `pkg-config` `.pc`
-  # files.
-  postInstall = ''
-    if [ "$dontDisableStatic" -eq "1" ]; then
-      rm -f $out/lib/*.la
-    else
-      rm -f $out/lib/*.a
-    fi
-  '';
+  doCheck = testSupport && stdenv.buildPlatform.canExecute stdenv.hostPlatform;
 
-  # SDL is weird in that instead of just dynamically linking with
-  # libraries when you `--enable-*` (or when `configure` finds) them
-  # it `dlopen`s them at runtime. In principle, this means it can
-  # ignore any missing optional dependencies like alsa, pulseaudio,
-  # some x11 libs, wayland, etc if they are missing on the system
-  # and/or work with wide array of versions of said libraries. In
-  # nixpkgs, however, we don't need any of that. Moreover, since we
-  # don't have a global ld-cache we have to stuff all the propagated
-  # libraries into rpath by hand or else some applications that use
-  # SDL API that requires said libraries will fail to start.
-  #
-  # You can grep SDL sources with `grep -rE 'SDL_(NAME|.*_SYM)'` to
-  # list the symbols used in this way.
-  postFixup =
-    let
-      rpath = lib.makeLibraryPath (
-        finalAttrs.dlopenPropagatedBuildInputs ++ finalAttrs.dlopenBuildInputs
-      );
-    in
-    lib.optionalString (stdenv.hostPlatform.extensions.sharedLibrary == ".so") ''
-      for lib in $out/lib/*.so* ; do
-        if ! [[ -L "$lib" ]]; then
-          patchelf --set-rpath "$(patchelf --print-rpath $lib):${rpath}" "$lib"
-        fi
-      done
-    '';
+  # See comment below. We actually *do* need these RPATH entries
+  dontPatchELF = true;
+
+  env = {
+    # Many dependencies are not directly linked to, but dlopen()'d at runtime. Adding them to the RPATH
+    # helps them be found
+    NIX_LDFLAGS =
+      lib.optionalString (stdenv.hostPlatform.extensions.sharedLibrary == ".so")
+        "-rpath ${
+          lib.makeLibraryPath (finalAttrs.dlopenBuildInputs ++ finalAttrs.dlopenPropagatedBuildInputs)
+        }";
+  };
 
   passthru = {
-    inherit openglSupport;
+    # Building this in its own derivation to make sure the rpath hack above propagate to users
+    debug-text-example = stdenv.mkDerivation (finalAttrs': {
+      pname = "sdl3-debug-text-example";
+      inherit (finalAttrs) version src;
+
+      sourceRoot = "${finalAttrs'.src.name}/examples/renderer/18-debug-text";
+
+      nativeBuildInputs = [
+        installShellFiles
+      ];
+
+      buildInputs = [ finalAttrs.finalPackage ];
+
+      postBuild = ''
+        $CC -lSDL3 -o debug-text{,.c}
+      '';
+
+      postInstall = ''
+        installBin debug-text
+      '';
+
+      meta = {
+        inherit (finalAttrs.meta) maintainers platforms;
+        mainProgram = "debug-text";
+      };
+    });
+
+    tests =
+      {
+        pkg-config = testers.hasPkgConfigModules { package = finalAttrs.finalPackage; };
+        inherit (finalAttrs.passthru) debug-text-example;
+      }
+      // lib.optionalAttrs stdenv.hostPlatform.isLinux {
+        nixosTest = nixosTests.sdl3;
+      };
+
     updateScript = nix-update-script {
       extraArgs = [
         "--version-regex"
-        "release-(.*)"
+        "'release-(.*)'"
       ];
-    };
-    tests = {
-      pkg-config = testers.hasPkgConfigModules { package = finalAttrs.finalPackage; };
-      inherit
-        guile-sdl2
-        jazz2
-        SDL2_ttf
-        SDL2_net
-        SDL2_gfx
-        SDL2_sound
-        SDL2_mixer
-        SDL2_image
-        ;
-      inherit (python3Packages) pygame pygame-ce pygame-sdl2;
     };
   };
 
-  meta = with lib; {
-    description = "Cross-platform multimedia library";
-    mainProgram = "sdl2-config";
-    homepage = "http://www.libsdl.org/";
-    changelog = "https://github.com/libsdl-org/SDL/releases/tag/release-${finalAttrs.version}";
-    license = licenses.zlib;
-    platforms = platforms.all;
-    maintainers = lib.teams.sdl.members;
-    pkgConfigModules = [ "sdl2" ];
+  meta = {
+    description = "Cross-platform development library";
+    homepage = "https://libsdl.org";
+    changelog = "https://github.com/libsdl-org/SDL/releases/tag/${finalAttrs.src.tag}";
+    license = lib.licenses.zlib;
+    maintainers = with lib.maintainers; [ getchoo ];
+    platforms = lib.platforms.unix;
+    pkgConfigModules = [ "sdl3" ];
   };
 })
